@@ -50,6 +50,7 @@ __attribute__((section("__versions"))) = {
 	{ 0xedc03953, "iounmap" },
 	{ 0xc1514a3b, "free_irq" },
 	{ 0x8f678b07, "__stack_chk_guard" },
+	{ 0x1e6d26a8, "strstr" },
 	{ 0x822137e2, "arm_heavy_mb" },
 	{ 0x7c32d0f0, "printk" },
 	{ 0x20c55ae0, "sscanf" },

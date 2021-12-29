@@ -60,14 +60,14 @@ static struct device *my_device;
 static struct cdev *my_cdev;
 static struct timer_info *tp = NULL;
 
-static int i_num = 1;
-static int i_cnt = 0;
-
+int flag_init = 1; //dozvola za inicijalizaciju tajmera
 int flag_start = 0; //dozvola za start, nakon sto se inicijalizuju vrednosti (koliko dugo broji)
 int flag_stop = 0; //dozvola za stop, moze tek nakon sto je poceto brojanje
 	
 static irqreturn_t xilaxitimer_isr(int irq,void*dev_id);
 static void setup_timer(uint64_t milliseconds);
+static void start_timer(void);
+static void stop_timer(void);
 static int timer_probe(struct platform_device *pdev);
 static int timer_remove(struct platform_device *pdev);
 int timer_open(struct inode *pinode, struct file *pfile);
@@ -114,25 +114,18 @@ static irqreturn_t xilaxitimer_isr(int irq,void*dev_id)
 	// Check Timer Counter Value
 	data = ioread32(tp->base_addr + XIL_AXI_TIMER_TCR_OFFSET);
 
-/////////
-	printk(KERN_INFO "xilaxitimer_isr: Interrupt %d occurred !\n",i_cnt);
-
 	// Clear Interrupt
 	data = ioread32(tp->base_addr + XIL_AXI_TIMER_TCSR_OFFSET);
 	iowrite32(data | XIL_AXI_TIMER_CSR_INT_OCCURED_MASK,
 			tp->base_addr + XIL_AXI_TIMER_TCSR_OFFSET);
 
-	// Increment number of interrupts that have occured
-	i_cnt++;
-	// Disable Timer after i_num interrupts
-	if (i_cnt>=i_num)
-	{
-		printk(KERN_NOTICE "xilaxitimer_isr: All of the interrupts have occurred. Disabling timer\n");
-		data = ioread32(tp->base_addr + XIL_AXI_TIMER_TCSR_OFFSET);
-		iowrite32(data & ~(XIL_AXI_TIMER_CSR_ENABLE_TMR_MASK), tp->base_addr + XIL_AXI_TIMER_TCSR_OFFSET);
-		i_cnt = 0;
-	}
+	// Disable Timer after interrupt
+	printk(KERN_NOTICE "xilaxitimer_isr: Interrupt has occurred. Disabling timer\n");
+	data = ioread32(tp->base_addr + XIL_AXI_TIMER_TCSR_OFFSET);
+	iowrite32(data & ~(XIL_AXI_TIMER_CSR_ENABLE_TMR_MASK), tp->base_addr + XIL_AXI_TIMER_TCSR_OFFSET);
 
+	flag_init = 1;
+	
 	return IRQ_HANDLED;
 }
 
@@ -190,13 +183,27 @@ static void setup_timer(uint64_t milliseconds)
 
 }
 	
-/*
+static void start_timer(void)
+{
+	
+	uint32_t data = 0;
+
 	// Start Timer bz setting enable signal
 	data = ioread32(tp->base_addr + XIL_AXI_TIMER_TCSR_OFFSET);
 	iowrite32(data | XIL_AXI_TIMER_CSR_ENABLE_TMR_MASK,
 			tp->base_addr + XIL_AXI_TIMER_TCSR_OFFSET);
-*/
+}
 
+static void stop_timer(void)
+{
+	uint32_t data = 0;
+
+	// Disable timer/counter while configuration is in progress
+	data = ioread32(tp->base_addr + XIL_AXI_TIMER_TCSR_OFFSET);
+	iowrite32(data & ~(XIL_AXI_TIMER_CSR_ENABLE_TMR_MASK),
+			tp->base_addr + XIL_AXI_TIMER_TCSR_OFFSET);
+	
+}
 //***************************************************
 // PROBE AND REMOVE
 static int timer_probe(struct platform_device *pdev)
@@ -313,7 +320,6 @@ ssize_t timer_write(struct file *pfile, const char __user *buffer, size_t length
 {
 	char buff[BUFF_SIZE];
 	uint64_t millis = 0;
-//	int number = 0;
 	uint64_t dani;
 	uint64_t sati;
 	uint64_t minute;
@@ -325,7 +331,7 @@ ssize_t timer_write(struct file *pfile, const char __user *buffer, size_t length
 		return -EFAULT;
 	buff[length] = '\0';
 
-	if (!flag_start)
+	if (flag_init)
 	{
 		ret = sscanf(buff,"%lld:%lld:%lld:%lld",&dani,&sati,&minute,&sekunde);
 		if(ret == 4)//two parameters parsed in sscanf
@@ -338,8 +344,9 @@ ssize_t timer_write(struct file *pfile, const char __user *buffer, size_t length
 			else
 			{
 				printk(KERN_INFO "xilaxitimer_write: Seting timer for %lld days, %lld hours, %lld minutes and %lld seconds.\n",dani,sati,minute,sekunde);
-			//	i_num = number;
 				setup_timer(millis);
+				flag_start = 1;
+				flag_stop = 0;
 			}
 		}
 		else
@@ -347,17 +354,30 @@ ssize_t timer_write(struct file *pfile, const char __user *buffer, size_t length
 			printk(KERN_WARNING "xilaxitimer_write: Wrong format\n");
 		}
 	
-	}	
-//	if (strstr(buff,"start") == buff)
-//	{
-
-//	}	
-//	else if (strstr(buff,"stop") == buff)
-//	{
+	}
+	if (flag_start)	
+	{
+		if (strstr(buff,"start") == buff)
+		{
+			start_timer();
+			printk(KERN_INFO "xilaxitimer_write: Timer started\n");
+			flag_init = 0;
+			flag_stop = 1;
+			flag_start = 0;
+		}
+	}
+	if (flag_stop)	
+	{
+		if (strstr(buff,"stop") == buff)
+		{
+			stop_timer();
+			printk(KERN_INFO "xilaxitimer_write: Timer stoped\n");
+			flag_stop = 0;
+			flag_init = 0;
+			flag_start = 1;
+		}
 		
-//	}
-
-//	ret = sscanf(buff,"%d,%lld",&number,&millis);
+	}
 
 	return length;
 }
