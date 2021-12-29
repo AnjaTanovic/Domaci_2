@@ -63,8 +63,11 @@ static struct timer_info *tp = NULL;
 static int i_num = 1;
 static int i_cnt = 0;
 
+int flag_start = 0; //dozvola za start, nakon sto se inicijalizuju vrednosti (koliko dugo broji)
+int flag_stop = 0; //dozvola za stop, moze tek nakon sto je poceto brojanje
+	
 static irqreturn_t xilaxitimer_isr(int irq,void*dev_id);
-static void setup_and_start_timer(uint64_t milliseconds);
+static void setup_timer(uint64_t milliseconds);
 static int timer_probe(struct platform_device *pdev);
 static int timer_remove(struct platform_device *pdev);
 int timer_open(struct inode *pinode, struct file *pfile);
@@ -136,7 +139,7 @@ static irqreturn_t xilaxitimer_isr(int irq,void*dev_id)
 //***************************************************
 //HELPER FUNCTION THAT RESETS AND STARTS TIMER WITH PERIOD IN MILISECONDS
 
-static void setup_and_start_timer(uint64_t milliseconds)
+static void setup_timer(uint64_t milliseconds)
 {
 	// Disable Timer Counter
 	uint64_t timer_load;
@@ -185,12 +188,14 @@ static void setup_and_start_timer(uint64_t milliseconds)
 	iowrite32(data | XIL_AXI_TIMER_CSR_DOWN_COUNT_MASK,
 			tp->base_addr + XIL_AXI_TIMER_TCSR_OFFSET);	
 
+}
+	
+/*
 	// Start Timer bz setting enable signal
 	data = ioread32(tp->base_addr + XIL_AXI_TIMER_TCSR_OFFSET);
 	iowrite32(data | XIL_AXI_TIMER_CSR_ENABLE_TMR_MASK,
 			tp->base_addr + XIL_AXI_TIMER_TCSR_OFFSET);
-
-}
+*/
 
 //***************************************************
 // PROBE AND REMOVE
@@ -308,33 +313,52 @@ ssize_t timer_write(struct file *pfile, const char __user *buffer, size_t length
 {
 	char buff[BUFF_SIZE];
 	uint64_t millis = 0;
-	int number = 0;
+//	int number = 0;
+	uint64_t dani;
+	uint64_t sati;
+	uint64_t minute;
+	uint64_t sekunde;
+	
 	int ret = 0;
 	ret = copy_from_user(buff, buffer, length);
 	if(ret)
 		return -EFAULT;
 	buff[length] = '\0';
 
-	ret = sscanf(buff,"%d,%lld",&number,&millis);
-	if(ret == 2)//two parameters parsed in sscanf
+	if (!flag_start)
 	{
-
-		if (millis > 180000000000000L)
+		ret = sscanf(buff,"%lld:%lld:%lld:%lld",&dani,&sati,&minute,&sekunde);
+		if(ret == 4)//two parameters parsed in sscanf
 		{
-			printk(KERN_WARNING "xilaxitimer_write: Maximum period exceeded, enter something less than 40000 \n");
+			millis = 86400000*dani+3600000*sati+60000*minute+1000*sekunde;
+			if (millis > 180000000000000L)
+			{
+				printk(KERN_WARNING "xilaxitimer_write: Maximum period exceeded, enter something less \n");
+			}
+			else
+			{
+				printk(KERN_INFO "xilaxitimer_write: Seting timer for %lld days, %lld hours, %lld minutes and %lld seconds.\n",dani,sati,minute,sekunde);
+			//	i_num = number;
+				setup_timer(millis);
+			}
 		}
 		else
 		{
-			printk(KERN_INFO "xilaxitimer_write: Starting timer for %d interrupts. One every %lld miliseconds \n",number,millis);
-			i_num = number;
-			setup_and_start_timer(millis);
+			printk(KERN_WARNING "xilaxitimer_write: Wrong format\n");
 		}
+	
+	}	
+//	if (strstr(buff,"start") == buff)
+//	{
 
-	}
-	else
-	{
-		printk(KERN_WARNING "xilaxitimer_write: Wrong format, expected n,t \n\t n-number of interrupts\n\t t-time in ms between interrupts\n");
-	}
+//	}	
+//	else if (strstr(buff,"stop") == buff)
+//	{
+		
+//	}
+
+//	ret = sscanf(buff,"%d,%lld",&number,&millis);
+
 	return length;
 }
 
