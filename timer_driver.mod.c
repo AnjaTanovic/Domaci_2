@@ -37,6 +37,8 @@ __attribute__((section("__versions"))) = {
 	{ 0xe9e59beb, "device_create" },
 	{ 0x2d0d89b2, "__class_create" },
 	{ 0xe3ec2f2b, "alloc_chrdev_region" },
+	{ 0xf4fa543b, "arm_copy_to_user" },
+	{ 0xf9e73082, "scnprintf" },
 	{ 0xf99fc839, "kmalloc_caches" },
 	{ 0xd6b8e852, "request_threaded_irq" },
 	{ 0x7ae7907a, "platform_get_irq" },

@@ -23,6 +23,7 @@
 #define XIL_AXI_TIMER_TLR0_OFFSET		0x4
 #define XIL_AXI_TIMER_TCSR1_OFFSET	0x10
 #define XIL_AXI_TIMER_TCR_OFFSET		0x8
+#define XIL_AXI_TIMER_TCR1_OFFSET                0x18
 #define XIL_AXI_TIMER_TLR1_OFFSET		0x14
 
 #define XIL_AXI_TIMER_CSR_CASC_MASK	0x00000800
@@ -63,6 +64,7 @@ static struct timer_info *tp = NULL;
 int flag_init = 1; //dozvola za inicijalizaciju tajmera
 int flag_start = 0; //dozvola za start, nakon sto se inicijalizuju vrednosti (koliko dugo broji)
 int flag_stop = 0; //dozvola za stop, moze tek nakon sto je poceto brojanje
+int endRead = 0;
 	
 static irqreturn_t xilaxitimer_isr(int irq,void*dev_id);
 static void setup_timer(uint64_t milliseconds);
@@ -144,6 +146,10 @@ static void setup_timer(uint64_t milliseconds)
 	timer_load0 = (uint32_t)timer_load;
 	timer_load1 = (uint32_t)(timer_load >> 32);
 	
+
+	printk(KERN_INFO "timer load0 je %u, a timer load 1 je %u\n",timer_load0, timer_load1);
+
+
 	// Disable timer/counter while configuration is in progress
 	data = ioread32(tp->base_addr + XIL_AXI_TIMER_TCSR_OFFSET);
 	iowrite32(data & ~(XIL_AXI_TIMER_CSR_ENABLE_TMR_MASK),
@@ -311,9 +317,52 @@ int timer_close(struct inode *pinode, struct file *pfile)
 
 ssize_t timer_read(struct file *pfile, char __user *buffer, size_t length, loff_t *offset) 
 {
+	uint32_t data1 = 0;
+	uint32_t data2 = 0;
+	uint32_t data3 = 0;
 
-	//printk(KERN_INFO "Succesfully read timer\n");
-	return 0;
+	int ret;
+	long int len = 0;
+	uint64_t time_buff = 0;
+	int time = 0;
+
+	char buff[BUFF_SIZE];
+	if (endRead){
+		endRead = 0;
+		printk(KERN_INFO "Succesfully read timer\n");
+		return 0;
+	}
+
+ //	data1 = ioread32(tp->base_addr + XIL_AXI_TIMER_TCR1_OFFSET);	
+ 	data2 = ioread32(tp->base_addr + XIL_AXI_TIMER_TCR_OFFSET);
+ //	data3 = ioread32(tp->base_addr + XIL_AXI_TIMER_TCR1_OFFSET);
+	
+/*	if (data1 != data3)
+	{
+		data2 = ioread32(tp->base_addr + XIL_AXI_TIMER_TCR_OFFSET);	
+		data3 = ioread32(tp->base_addr + XIL_AXI_TIMER_TCR1_OFFSET);
+	}
+
+	//data2 donji biti, data3 gornji biti
+	time_buff = data3;
+	time_buff <<= 32;
+
+*/	time_buff += data2;
+		
+	printk(KERN_INFO "Time_buff je %llu\n", time_buff);
+
+//	time = scanf("%llu", time_buff);
+
+//	sprintf(buff, "%llu", time_buff); 
+	//len = scnprintf(buff,STRING_SIZE , "\nString u baferu je: %s\n", buff);
+	len = scnprintf(buff,BUFF_SIZE , "%llu", time_buff);
+	ret = copy_to_user(buffer, buff, len);
+	if(ret)
+		return -EFAULT;
+	endRead = 1;
+	
+
+	return len;
 }
 
 ssize_t timer_write(struct file *pfile, const char __user *buffer, size_t length, loff_t *offset) 
@@ -333,7 +382,7 @@ ssize_t timer_write(struct file *pfile, const char __user *buffer, size_t length
 
 	if (flag_init)
 	{
-		ret = sscanf(buff,"%lld:%lld:%lld:%lld",&dani,&sati,&minute,&sekunde);
+		ret = sscanf(buff,"%llu:%llu:%llu:%llu",&dani,&sati,&minute,&sekunde);
 		if(ret == 4)//two parameters parsed in sscanf
 		{
 			millis = 86400000*dani+3600000*sati+60000*minute+1000*sekunde;
@@ -343,7 +392,7 @@ ssize_t timer_write(struct file *pfile, const char __user *buffer, size_t length
 			}
 			else
 			{
-				printk(KERN_INFO "xilaxitimer_write: Seting timer for %lld days, %lld hours, %lld minutes and %lld seconds.\n",dani,sati,minute,sekunde);
+				printk(KERN_INFO "xilaxitimer_write: Seting timer for %llu days, %llu hours, %llu minutes and %llu seconds.\n",dani,sati,minute,sekunde);
 				setup_timer(millis);
 				flag_start = 1;
 				flag_stop = 0;
