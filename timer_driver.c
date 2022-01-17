@@ -167,7 +167,7 @@ static void setup_timer(uint64_t milliseconds)
 	iowrite32(timer_load0, tp->base_addr + XIL_AXI_TIMER_TLR0_OFFSET);
 	iowrite32(timer_load1, tp->base_addr + XIL_AXI_TIMER_TLR1_OFFSET);
 
-	// Load initial value into counter from load register
+	// Load initial value into counter from load registers
 	data = ioread32(tp->base_addr + XIL_AXI_TIMER_TCSR_OFFSET);
 	iowrite32(data | XIL_AXI_TIMER_CSR_LOAD_MASK,
 			tp->base_addr + XIL_AXI_TIMER_TCSR_OFFSET);
@@ -175,6 +175,15 @@ static void setup_timer(uint64_t milliseconds)
 	data = ioread32(tp->base_addr + XIL_AXI_TIMER_TCSR_OFFSET);
 	iowrite32(data & ~(XIL_AXI_TIMER_CSR_LOAD_MASK),
 			tp->base_addr + XIL_AXI_TIMER_TCSR_OFFSET);
+	
+	data = ioread32(tp->base_addr + XIL_AXI_TIMER_TCSR1_OFFSET);
+	iowrite32(data | XIL_AXI_TIMER_CSR_LOAD_MASK,
+			tp->base_addr + XIL_AXI_TIMER_TCSR1_OFFSET);
+
+	data = ioread32(tp->base_addr + XIL_AXI_TIMER_TCSR1_OFFSET);
+	iowrite32(data & ~(XIL_AXI_TIMER_CSR_LOAD_MASK),
+			tp->base_addr + XIL_AXI_TIMER_TCSR1_OFFSET);
+
 
 	// Enable interrupts and autoreload, rest should be zero
 	iowrite32(XIL_AXI_TIMER_CSR_ENABLE_INT_MASK | XIL_AXI_TIMER_CSR_AUTO_RELOAD_MASK,
@@ -340,11 +349,11 @@ ssize_t timer_read(struct file *pfile, char __user *buffer, size_t length, loff_
 		return 0;
 	}
 
- //	data1 = ioread32(tp->base_addr + XIL_AXI_TIMER_TCR1_OFFSET);	
+ 	data1 = ioread32(tp->base_addr + XIL_AXI_TIMER_TCR1_OFFSET);	
  	data2 = ioread32(tp->base_addr + XIL_AXI_TIMER_TCR_OFFSET);
- //	data3 = ioread32(tp->base_addr + XIL_AXI_TIMER_TCR1_OFFSET);
+	data3 = ioread32(tp->base_addr + XIL_AXI_TIMER_TCR1_OFFSET);
 	
-/*	if (data1 != data3)
+	if (data1 != data3)
 	{
 		data2 = ioread32(tp->base_addr + XIL_AXI_TIMER_TCR_OFFSET);	
 		data3 = ioread32(tp->base_addr + XIL_AXI_TIMER_TCR1_OFFSET);
@@ -354,7 +363,7 @@ ssize_t timer_read(struct file *pfile, char __user *buffer, size_t length, loff_
 	time_buff = data3;
 	time_buff <<= 32;
 
-*/	time_buff += data2;
+	time_buff += data2;
 	
 	//u time_buff se nalazi koliko puta treba da se izbroji 10ns da bi se dobio potreban interval
 	//prvo se taj broj podeli sa 10000 => koliko ms je to
