@@ -18,7 +18,7 @@
 
 #include <linux/interrupt.h> //irqreturn_t, request_irq
 
-
+//biblioteka za div_u64 funkciju (deljenje 64-bitnih brojeva)
 #include <linux/math64.h>
 
 // REGISTER CONSTANTS
@@ -125,7 +125,7 @@ static irqreturn_t xilaxitimer_isr(int irq,void*dev_id)
 			tp->base_addr + XIL_AXI_TIMER_TCSR_OFFSET);
 
 	// Disable Timer after interrupt
-	printk(KERN_NOTICE "xilaxitimer_isr: Interrupt has occurred. Disabling timer\n");
+	printk(KERN_NOTICE "Isteklo vreme!\n");
 	data = ioread32(tp->base_addr + XIL_AXI_TIMER_TCSR_OFFSET);
 	iowrite32(data & ~(XIL_AXI_TIMER_CSR_ENABLE_TMR_MASK), tp->base_addr + XIL_AXI_TIMER_TCSR_OFFSET);
 
@@ -149,9 +149,6 @@ static void setup_timer(uint64_t milliseconds)
 	timer_load0 = (uint32_t)timer_load;
 	timer_load1 = (uint32_t)(timer_load >> 32);
 	
-
-	printk(KERN_INFO "timer load0 je %u, a timer load 1 je %u\n",timer_load0, timer_load1);
-
 
 	// Disable timer/counter while configuration is in progress
 	data = ioread32(tp->base_addr + XIL_AXI_TIMER_TCSR_OFFSET);
@@ -390,8 +387,9 @@ ssize_t timer_read(struct file *pfile, char __user *buffer, size_t length, loff_
 	sprintf(time_str, "%llu", time_buff);
 	
 	len = scnprintf(buff,BUFF_SIZE , "Trenutno stanje brojaca je: %s dana, %s sati %s minuta i %s sekundi\n\n", dani_s, sati_s, minute_s, sekunde_s);
-//	len = scnprintf(buff,BUFF_SIZE , "Trenutno stanje brojaca je: %s\n\n", time_str);
+	
 	ret = copy_to_user(buffer, buff, len);
+	
 	if(ret)
 		return -EFAULT;
 	endRead = 1;
@@ -402,7 +400,7 @@ ssize_t timer_read(struct file *pfile, char __user *buffer, size_t length, loff_
 ssize_t timer_write(struct file *pfile, const char __user *buffer, size_t length, loff_t *offset) 
 {
 	char buff[BUFF_SIZE];
-	uint64_t millis = 0;
+	int64_t millis = 0;
 	uint64_t dani;
 	uint64_t sati;
 	uint64_t minute;
@@ -414,7 +412,38 @@ ssize_t timer_write(struct file *pfile, const char __user *buffer, size_t length
 		return -EFAULT;
 	buff[length] = '\0';
 
-	if (flag_init)
+	if (strstr(buff,"start") == buff)
+	{
+		if (flag_start)	
+		{
+			start_timer();
+			printk(KERN_INFO "Pocinje odbrojavanje tajmera\n");
+			flag_init = 0;
+			flag_stop = 1;
+			flag_start = 0;
+		}
+		else
+		{
+			printk(KERN_WARNING "Ne mozete da startujete tajmer\n");
+		}
+	}
+
+	else if (strstr(buff,"stop") == buff)
+	{
+		if (flag_stop)
+		{
+			stop_timer();
+			printk(KERN_INFO "Zaustavljen tajmer\n");
+			flag_stop = 0;
+			flag_init = 1;
+			flag_start = 1;
+		}
+		else
+		{
+			printk(KERN_WARNING "Ne mozete sada zaustaviti tajmer\n");
+		}
+	}
+	else if (flag_init)
 	{
 		ret = sscanf(buff,"%llu:%llu:%llu:%llu",&dani,&sati,&minute,&sekunde);
 		if(ret == 4)//two parameters parsed in sscanf
@@ -422,11 +451,11 @@ ssize_t timer_write(struct file *pfile, const char __user *buffer, size_t length
 			millis = 86400000*dani+3600000*sati+60000*minute+1000*sekunde;
 			if (millis > 180000000000000L)
 			{
-				printk(KERN_WARNING "xilaxitimer_write: Maximum period exceeded, enter something less \n");
+				printk(KERN_WARNING "Unijet preveliki period vremena \n");
 			}
 			else
 			{
-				printk(KERN_INFO "xilaxitimer_write: Seting timer for %llu days, %llu hours, %llu minutes and %llu seconds.\n",dani,sati,minute,sekunde);
+				printk(KERN_INFO "Postavljamo tajmer na %llu dana, %llu sati, %llu minuta i %llu sekundi.\n",dani,sati,minute,sekunde);
 				setup_timer(millis);
 				flag_start = 1;
 				flag_stop = 0;
@@ -434,33 +463,15 @@ ssize_t timer_write(struct file *pfile, const char __user *buffer, size_t length
 		}
 		else
 		{
-			printk(KERN_WARNING "xilaxitimer_write: Wrong format\n");
+			printk(KERN_WARNING "Pogresan format\n");
 		}
 	
 	}
-	if (flag_start)	
+	else
 	{
-		if (strstr(buff,"start") == buff)
-		{
-			start_timer();
-			printk(KERN_INFO "xilaxitimer_write: Timer started\n");
-			flag_init = 0;
-			flag_stop = 1;
-			flag_start = 0;
-		}
+		printk(KERN_WARNING "Pogresno unijeta komanda, tajmer broji!\n");
 	}
-	if (flag_stop)	
-	{
-		if (strstr(buff,"stop") == buff)
-		{
-			stop_timer();
-			printk(KERN_INFO "xilaxitimer_write: Timer stoped\n");
-			flag_stop = 0;
-			flag_init = 0;
-			flag_start = 1;
-		}
-		
-	}
+	
 
 	return length;
 }
