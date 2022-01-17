@@ -18,6 +18,9 @@
 
 #include <linux/interrupt.h> //irqreturn_t, request_irq
 
+
+#include <linux/math64.h>
+
 // REGISTER CONSTANTS
 #define XIL_AXI_TIMER_TCSR_OFFSET	0x0
 #define XIL_AXI_TIMER_TLR0_OFFSET		0x4
@@ -355,21 +358,21 @@ ssize_t timer_read(struct file *pfile, char __user *buffer, size_t length, loff_
 	
 	//u time_buff se nalazi koliko puta treba da se izbroji 10ns da bi se dobio potreban interval
 	//prvo se taj broj podeli sa 10000 => koliko ms je to
-	pomocna = time_buff / 10000;
+	pomocna = div_u64(time_buff,100000);
 	//broj sekundi 
-	pomocna = pomocna / 1000;
+	pomocna = div_u64(pomocna , 1000);
 	//broj dana
-	dani = pomocna/60/60/24;
-	//ovako se sece visak sati, minuta i sekundi, treba to podesiti
+	dani = div_u64(div_u64(div_u64(pomocna, 60), 60), 24);
+	//ovako se sece visak sati,dana i minuta, problem
 	//ostatak se vraca u sekunde i opet isti postupak
 	pomocna -= dani * 24 * 60 * 60;
 	//sad su dobijene sekunde i one se prebacuju u sate
-	sati = pomocna/60/60;   
-	
+	sati = div_u64(div_u64(pomocna, 60), 60);
 	pomocna -= sati * 60 * 60;
-	minute = pomocna/60;
-	sekunde -= minute*60;
-		
+	minute = div_u64(pomocna, 60);
+	pomocna -= minute*60;
+	sekunde = pomocna;		
+
 	sprintf(dani_s, "%llu", dani);
 	sprintf(sati_s, "%llu", sati);
 	sprintf(minute_s, "%llu", minute);
@@ -378,13 +381,12 @@ ssize_t timer_read(struct file *pfile, char __user *buffer, size_t length, loff_
 	sprintf(time_str, "%llu", time_buff);
 	
 	len = scnprintf(buff,BUFF_SIZE , "Trenutno stanje brojaca je: %s dana, %s sati %s minuta i %s sekundi\n\n", dani_s, sati_s, minute_s, sekunde_s);
-//	len = scnprintf(buff,BUFF_SIZE , "Trenutno stanje brojaca je: %s\n\n", time_buff);
+//	len = scnprintf(buff,BUFF_SIZE , "Trenutno stanje brojaca je: %s\n\n", time_str);
 	ret = copy_to_user(buffer, buff, len);
 	if(ret)
 		return -EFAULT;
 	endRead = 1;
 	
-
 	return len;
 }
 
