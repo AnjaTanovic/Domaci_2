@@ -39,7 +39,7 @@
 #define XIL_AXI_TIMER_CSR_DOWN_COUNT_MASK 0x00000002
 #define XIL_AXI_TIMER_CSR_CAPTURE_MODE_MASK 0x00000001
 
-#define BUFF_SIZE 20
+#define BUFF_SIZE 70
 #define DRIVER_NAME "timer"
 #define DEVICE_NAME "xilaxitimer"
 
@@ -321,10 +321,14 @@ ssize_t timer_read(struct file *pfile, char __user *buffer, size_t length, loff_
 	uint32_t data2 = 0;
 	uint32_t data3 = 0;
 
+	uint64_t dani = 0, sati = 0, minute = 0, sekunde = 0;
+	char dani_s[BUFF_SIZE], sati_s[BUFF_SIZE], minute_s[BUFF_SIZE], sekunde_s[BUFF_SIZE];
+	uint64_t pomocna = 0;
+	
 	int ret;
 	long int len = 0;
 	uint64_t time_buff = 0;
-	int time = 0;
+	char time_str[BUFF_SIZE];
 
 	char buff[BUFF_SIZE];
 	if (endRead){
@@ -348,14 +352,33 @@ ssize_t timer_read(struct file *pfile, char __user *buffer, size_t length, loff_
 	time_buff <<= 32;
 
 */	time_buff += data2;
+	
+	//u time_buff se nalazi koliko puta treba da se izbroji 10ns da bi se dobio potreban interval
+	//prvo se taj broj podeli sa 10000 => koliko ms je to
+	pomocna = time_buff / 10000;
+	//broj sekundi 
+	pomocna = pomocna / 1000;
+	//broj dana
+	dani = pomocna/60/60/24;
+	//ovako se sece visak sati, minuta i sekundi, treba to podesiti
+	//ostatak se vraca u sekunde i opet isti postupak
+	pomocna -= dani * 24 * 60 * 60;
+	//sad su dobijene sekunde i one se prebacuju u sate
+	sati = pomocna/60/60;   
+	
+	pomocna -= sati * 60 * 60;
+	minute = pomocna/60;
+	sekunde -= minute*60;
 		
-	printk(KERN_INFO "Time_buff je %llu\n", time_buff);
-
-//	time = scanf("%llu", time_buff);
-
-//	sprintf(buff, "%llu", time_buff); 
-	//len = scnprintf(buff,STRING_SIZE , "\nString u baferu je: %s\n", buff);
-	len = scnprintf(buff,BUFF_SIZE , "%llu", time_buff);
+	sprintf(dani_s, "%llu", dani);
+	sprintf(sati_s, "%llu", sati);
+	sprintf(minute_s, "%llu", minute);
+	sprintf(sekunde_s, "%llu", sekunde);
+	
+	sprintf(time_str, "%llu", time_buff);
+	
+	len = scnprintf(buff,BUFF_SIZE , "Trenutno stanje brojaca je: %s dana, %s sati %s minuta i %s sekundi\n\n", dani_s, sati_s, minute_s, sekunde_s);
+//	len = scnprintf(buff,BUFF_SIZE , "Trenutno stanje brojaca je: %s\n\n", time_buff);
 	ret = copy_to_user(buffer, buff, len);
 	if(ret)
 		return -EFAULT;
